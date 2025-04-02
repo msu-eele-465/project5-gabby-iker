@@ -116,7 +116,7 @@ char keypad_unlocking(void)
 //----------------------------------------------------------------------
 // Begin Unlocked Routine
 //----------------------------------------------------------------------
-char keypad_update_led_bar(void)
+char keypad_unlocked(void)
 {
     char key_unlocked = '\0';
 
@@ -136,53 +136,7 @@ char keypad_update_led_bar(void)
                     if ((PROWIN & (1 << row)) == 0) {
                         key_unlocked = keypad[row][col];
                         if (key_unlocked != 'D') {
-                            master_i2c_send(key_unlocked, 0x068);   // led bar slave
-                            //set_led_bar(key_unlocked);
-                        }
-                        // Wait for key release
-                        while ((PROWIN & (1 << row)) == 0);
-                        PCOLOUT |= (1 << col);
-
-                        if (key_unlocked == 'D') {
-                            rgb_led_continue(3);  // Set LED to red when 'D' is pressed
-                            master_i2c_send('D', 0x068);
-                            //set_led_bar('D');
-                            return key_unlocked;
-                        }
-                    }
-                }
-            }
-            // Deactivate column
-            PCOLOUT |= (1 << col);
-        }
-    }
-    return key_unlocked;
-}
-//--End Unlocked--------------------------------------------------------
-
-//----------------------------------------------------------------------
-// Begin Unlocked Routine
-//----------------------------------------------------------------------
-char keypad_update_lcd(void)
-{
-    char key_unlocked = '\0';
-
-    // Continuously poll until 'D' is pressed
-    while (key_unlocked != 'D') {
-        int row, col;
-
-        for (col = 0; col < 4; col++) {
-            // Activate column
-            PCOLOUT &= ~(1 << col);
-            __delay_cycles(1000);
-
-            // Check all rows
-            for (row = 0; row < 4; row++) {
-                if ((PROWIN & (1 << row)) == 0) {
-                    debounce();
-                    if ((PROWIN & (1 << row)) == 0) {
-                        key_unlocked = keypad[row][col];
-                        if (key_unlocked != 'D') {
+                            master_i2c_send(key_unlocked, 0x068);
                             master_i2c_send(key_unlocked, 0x048);
                             //set_led_bar(key_unlocked);
                         }
@@ -192,6 +146,7 @@ char keypad_update_lcd(void)
 
                         if (key_unlocked == 'D') {
                             rgb_led_continue(3);  // Set LED to red when 'D' is pressed
+                            master_i2c_send('D', 0x068);
                             master_i2c_send('D', 0x048);
                             //set_led_bar('D');
                             return key_unlocked;
@@ -208,85 +163,13 @@ char keypad_update_lcd(void)
 //--End Unlocked--------------------------------------------------------
 
 //----------------------------------------------------------------------
-// Begin Unlocked Routine
-//----------------------------------------------------------------------
-char keypad_unlocked_set_mode(void)
-{
-    char key_unlocked = '\0';
-
-    // Continuously poll until 'D' is pressed
-    while (key_unlocked != 'D') {
-        int row, col;
-
-        for (col = 0; col < 4; col++) {
-            // Activate column
-            PCOLOUT &= ~(1 << col);
-            __delay_cycles(1000);
-
-            // Check all rows
-            for (row = 0; row < 4; row++) {
-                if ((PROWIN & (1 << row)) == 0) {
-                    debounce();
-                    if ((PROWIN & (1 << row)) == 0) {
-                        key_unlocked = keypad[row][col];
-                        // Switch case statement for set led bar, set lcd, and set moving average
-                        /*if (key_unlocked != 'D') {
-                            
-                            //set_led_bar(key_unlocked);
-                        }
-                        // Wait for key release
-                        while ((PROWIN & (1 << row)) == 0);
-                        PCOLOUT |= (1 << col);
-
-                        if (key_unlocked == 'D') {
-                            rgb_led_continue(3);  // Set LED to red when 'D' is pressed
-                            
-                            //set_led_bar('D');
-                            return key_unlocked;
-                        }
-                        */
-                    }
-                }
-            }
-            // Deactivate column
-            PCOLOUT |= (1 << col);
-        }
-    }
-    return key_unlocked;
-}
-//--End Unlocked--------------------------------------------------------
-
-//----------------------------------------------------------------------
-// Begin RTC Routine
-//----------------------------------------------------------------------
-void rtc_init(void)
-{
-    // P2.0 as input (with pull-up)
-    P2DIR &= ~0x01;     // P2.0 as inputs
-    P2REN |= 0x01;      // Activate pull-up
-    P2OUT |= 0x01;      // Activate pull-up in rows
-}
-
-void rtc(void)
-{
-    int move_avg_cnt_cur;
-    int move_avg_cnt_max = 3;
-    int temperature;
-    for (move_avg_cnt_cur = move_avg_cnt_max; move_avg_cnt_cur--; move_avg_cnt_cur > 0)
-    {
-        temperature = P2IN 
-    }
-}
-//--End RTC Routine-----------------------------------------------------
-
-//----------------------------------------------------------------------
 // Begin Main
 //----------------------------------------------------------------------
 
 int main(void)
 {   
     int counter, i, equal;
-    char introduced_password[TABLE_SIZE], key, save_digit, key_unlocked; 
+    char introduced_password[TABLE_SIZE], key; 
 
     keypad_init();
     heartbeat_init();
@@ -307,7 +190,6 @@ int main(void)
                 counter++;
             }        
         }
-
         //Compare the introduced code with the real code   
         equal = 1;   
         for (i = 0; i < TABLE_SIZE; i++) {
@@ -317,7 +199,6 @@ int main(void)
                 break;
             }
         }
-
         // Verify the code
         if (equal==1) 
         {
@@ -329,8 +210,6 @@ int main(void)
                 introduced_password[i] = 0;        
             }
             keypad_unlocked();  // This now handles polling until 'D' is pressed
-
-
         } 
         else 
         {
@@ -339,7 +218,6 @@ int main(void)
             rgb_led_continue(3);            // Set LED to red
             master_i2c_send('\0', 0x068);
             master_i2c_send('\0', 0x048);
-            //led_patterns('\0');
             for (i = 0; i < TABLE_SIZE; i++) 
             {
                 introduced_password[i] = 0;        
@@ -348,4 +226,4 @@ int main(void)
     }
     return 0;
 }
-//--End Main------------------------------------------------------------
+//--End Main-------------------------------------------------------------------
