@@ -169,88 +169,83 @@ void lcd_print(const char* str, unsigned char startPos) {
 }
 //-- End LCD Print--------------------------------------------------------------
 
+
+void display_temperature(float temp)
+{
+
+}
+
 //------------------------------------------------------------------------------
 // Begin Display Output
 //------------------------------------------------------------------------------
 void display_output(char input)
 {
+    switch (input)
+    {
+        case A:
+            // set mode = 'A';
+            break;
+        case B:
+            // display "Set Window Size"
+            // set mode = 'B'
+            break;
+        case C:
+            // set mode = 'C'
+            break;
+    }
+    // if mode == 'B':
+        // update window size (bottom right);
+    // else if mode == 'C': (use this existing code)
     switch (input) 
     { 
-        case 'C':
-            toggle_cursor();
-            break;
-        case '9':
-            toggle_blink_cursor();
-            break;
         case '0':
             send_command(0x01);
             __delay_cycles(2000);
             lcd_print("STATIC", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('0');
-            lcd_set_cursor(0x06);
             break;
         case '1':
             send_command(0x01);
             __delay_cycles(2000);
             lcd_print("TOGGLE", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('1');
-            lcd_set_cursor(0x06);
             break;
         case '2':
             send_command(0x01);
             __delay_cycles(2000);
             lcd_print("UP COUNTER", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('2');
-            lcd_set_cursor(0x0A);
             break;
         case '3':
             send_command(0x01);
             __delay_cycles(2000);
             lcd_print("IN AND OUT", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('3');
-            lcd_set_cursor(0x0A);
             break;
         case '4':
             send_command(0x01);
             __delay_cycles(2000);
             lcd_print("DOWN COUNTER", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('4');
-            lcd_set_cursor(0x0C);
             break;
         case '5':
             send_command(0x01);
             __delay_cycles(2000);
             lcd_print("ROTATE 1 LEFT", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('5');
-            lcd_set_cursor(0x0D);
             break;
         case '6':
             send_command(0x01);
             __delay_cycles(2000);
             lcd_print("ROTATE 7 RIGHT", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('6');
-            lcd_set_cursor(0x0E);
             break;
         case '7':
             send_command(0x01);
             __delay_cycles(2000);
             lcd_print("FILL LEFT", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('7');
-            lcd_set_cursor(0x09);
             break;
         case 'D':
             send_command(0x01);
             break;
 
     }
+    // else if mode == '\0'
+        // Display "No Pattern"
+
 }
 //-- End Display Output---------------------------------------------------------
 
