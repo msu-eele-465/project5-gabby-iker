@@ -1,4 +1,6 @@
+#include "intrinsics.h"
 #include <msp430.h>
+#include <stdbool.h>
 
 
 // Puerto 2
@@ -88,12 +90,6 @@ void lcdInit() {
     send_command(0x06);  // Modo de escritura automática
     send_command(0x01);  // Limpiar la pantalla
     __delay_cycles(2000); // Esperar para limpiar la pantalla
-
-    send_command(0x01);
-     __delay_cycles(2000);
-    lcd_print("NO PATTERN", 0x00);
-    lcd_print("T=xx.xºC",0x40);
-    lcd_print("N=3", 0x4D);
 }
 
 void lcdSetCursor(unsigned char position) {
@@ -127,9 +123,20 @@ void display_output(char input)
         case 'D':
             send_command(0x01);
             break;
+        case 'Z':
+            send_command(0x01);
+            __delay_cycles(2000);
+            lcd_print("NO PATTERN", 0x00);
+            lcd_print("T=xx.x", 0x40);      // Start of temperature display
+            lcdSetCursor(0x46);             // Move to where the degree symbol goes
+            send_data(0xDF);                // Send the built-in degree symbol
+            lcd_print("C", 0x47);           // Continue with 'C'
+            lcd_print("N=3", 0x4D);
+            mode = 'A';
+            break;
     }
 
-    if ((mode == 'B') && (input >= '0' && input <= '9')) 
+    if ((mode == 'B') && (input >= '1' && input <= '9')) 
     { 
         new_window_size = input;
         lcd_print("N=", 0x4D);
@@ -177,11 +184,6 @@ void display_output(char input)
                 pattern_cur = input;
                 mode = 'A';
                 break;
-            case '7':
-                lcd_print("FILL LEFT       ", 0x00);
-                pattern_cur = input;
-                mode = 'A';
-                break;
             case 'D':
                 send_command(0x01);
                 mode = 'A';
@@ -209,7 +211,6 @@ __interrupt void USCI_B0_ISR(void)
     switch (__even_in_range(UCB0IV, USCI_I2C_UCTXIFG0))
     {
         case USCI_I2C_UCRXIFG0:         // Receive Interrupt
-            key_unlocked = UCB0RXBUF;   // Read received data
             display_output(UCB0RXBUF);
             break;
         default: 
