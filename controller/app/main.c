@@ -50,12 +50,6 @@ char keypad[ROW][COL] = {
 };
 
 int lockState = 3;
-volatile float temp_samples[3] = {0};  // Storage for 3 samples
-volatile float averaged_temp = 0.0;    // The calculated moving average
-volatile unsigned int sample_count = 0;
-volatile unsigned int adc_result = 0;
-volatile float temperature_celsius = 0.0;
-
 //--End Variables-------------------------------------------------------
 
 //----------------------------------------------------------------------
@@ -82,37 +76,6 @@ void keypad_init()
     PCOLOUT &= ~(BIT0 | BIT1 | BIT2 | BIT3);  // Set down the pins P5.0, P5.1, P5.2 y P5.3:
 }
 //--End Initialize Keypad-----------------------------------------------
-
-void adc_init(void)
-{
-    P1SEL0 |= BIT3;  // A3
-    P1SEL1 |= BIT3;
-
-    ADCCTL0 |= ADCSHT_2 | ADCON;            // Sampling time, ADC on
-    ADCCTL1 |= ADCSHP | ADCCONSEQ_0;        // Pulse sample mode, single channel
-    ADCCTL2 |= ADCRES_2;                    // 12-bit resolution
-    ADCMCTL0 |= ADCINCH_3;                  // A3 input
-    ADCIE |= ADCIE0;                        // Enable interrupt
-}
-//--End Initialize ADC--------------------------------------------------
-
-//----------------------------------------------------------------------
-// Begin Initializing Timer B1
-//----------------------------------------------------------------------
-void timer_b1_init(void) 
-{
-    // Setup Timer
-    TB1CTL |= TBCLR;            // Clear timers and dividers
-    TB1CTL |= TBSSEL__ACLK;     // Source = ACLK
-    TB1CTL |= MC__UP;           // Mode = UP
-    TB1CCR0 = 16384;            // CCR0 = 16384 (0.5s overflow)
-
-    // Setup Timer Compare IRQ
-    TB1CCTL0 &= ~CCIFG;         //Clear CCR0 Flag
-    TB1CCTL0 |= CCIE;           // Enable TB0 CCR0 Overflow IRQ
-}
-//--End Initialize TimerB0----------------------------------------------
-
 
 //----------------------------------------------------------------------
 // Begin Unlocking Routine
@@ -197,31 +160,19 @@ char keypad_unlocked(void)
 }
 //--End Unlocked--------------------------------------------------------
 
-float calculate_temperature(unsigned int adc_val) {
-    float Vout = (adc_val * 3.3) / 4095.0; // Assuming 3.3V reference, 12-bit ADC
-    return (-1481.96 + sqrt(2.1962e6 + (1.8639 - Vout) / 3.88e-6)) / 1e2;
-}
-
 //----------------------------------------------------------------------
 // Begin Main
 //----------------------------------------------------------------------
 
 int main(void)
 {   
-    
     int counter, i, equal;
     char introduced_password[TABLE_SIZE], key; 
-
-        WDTCTL = WDTPW | WDTHOLD;   // Stop watchdog timer
 
     keypad_init();
     heartbeat_init();
     rgb_led_init();
     master_i2c_init();
-    adc_init();
-    timer_b1_init();
-
-    __enable_interrupt();  // Enable global interrupts
       
     while(true)
     {
@@ -279,54 +230,3 @@ int main(void)
     return 0;
 }
 //--End Main------------------------------------------------------------
-
-//------------------------------------------------------------------------------
-// Begin Interrupt Service Routines
-//------------------------------------------------------------------------------
-#pragma vector = ADC_VECTOR
-__interrupt void ADC_ISR(void)
-{
-    if (ADCIV == ADCIV_ADCIFG) {
-        adc_result = ADCMEM0;
-        temperature_celsius = calculate_temperature(adc_result);
-
-        // Save sample
-        temp_samples[sample_count] = temperature_celsius;
-        sample_count++;
-
-        if (sample_count >= 3) {
-    averaged_temp = (temp_samples[0] + temp_samples[1] + temp_samples[2]) / 3.0;
-    sample_count = 0;
-
-    // Conversión manual a texto
-    int temp_int = (int)averaged_temp;
-    int temp_frac = (int)((averaged_temp - temp_int) * 10);  // 1 decimal
-
-    char temp_string[16];
-    temp_string[0] = 'T';
-    temp_string[1] = 'e';
-    temp_string[2] = 'm';
-    temp_string[3] = 'p';
-    temp_string[4] = ':';
-    temp_string[5] = ' ';
-    temp_string[6] = temp_int / 10 + '0';            // decenas
-    temp_string[7] = temp_int % 10 + '0';            // unidades
-    temp_string[8] = '.';
-    temp_string[9] = temp_frac + '0';                // primer decimal
-    temp_string[10] = 'C';
-    temp_string[11] = '\0';
-
-    int i;
-    for (i = 0; temp_string[i] != '\0'; i++) {
-        master_i2c_send(temp_string[i], 0x068);
-    }
-}
-    }
-}
-#pragma vector = TIMER1_B0_VECTOR
-__interrupt void ISR_TB1_CCR0(void)
-{
-    ADCCTL0 |= ADCENC | ADCSC;  // Start conversion
-    TB1CCTL0 &= ~CCIFG;
-}
-//-- End Interrupt Service Routines --------------------------------------------
