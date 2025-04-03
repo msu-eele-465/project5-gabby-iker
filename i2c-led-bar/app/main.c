@@ -35,6 +35,7 @@ bool pattern3_start = false;
 bool pattern4_start = false;
 bool pattern5_start = false;
 bool pattern6_start = false;
+bool bool_set_led   = false;
 unsigned int timing_base = 32768;           // 1 second
 int timing_adj;                             // + or - 0.5 seconds
 unsigned char ledPattern_state;             // Store LED pattern
@@ -233,19 +234,17 @@ void led_patterns(char key_cur)
 //------------------------------------------------------------------------------
 void set_led_bar(char key_input)
 {
-    if (key_input == 'A') {
-        if (timing_base - 8192 >= 8192) {
-            TB1CCR0 = (timing_base -= 8192);
-        }
-    } else if (key_input == 'B') {
-        if (timing_base + 8192 <= 0xFFFF - 8192) {
-            TB1CCR0 = (timing_base += 8192);
-        }
-    } else {
+    if (key_input == 'C') {
+        bool_set_led = true;
+    } else if (key_input == 'A' || key_input == 'B') {
+        bool_set_led = false;
+    }
+    if ((bool_set_led == true && (key_input >= '0' && key_input <= '6')) || key_input == 'D') {
         key_prev = key_cur;
         key_cur = key_input;
         new_input_bool = true;
         led_patterns(key_cur);
+        bool_set_led = false;
     }
 }
 //--End Set LED Bar-------------------------------------------------------------
