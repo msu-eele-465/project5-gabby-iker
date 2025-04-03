@@ -10,11 +10,13 @@
 #define D5 BIT5     // P1.5
 #define D6 BIT6     // P1.6
 #define D7 BIT7     // P1.7
-
-
 #define SLAVE_ADDR  0x48                    // Slave I2C Address
+
 volatile unsigned char receivedData = 0;    // Recieved data
 char key_unlocked;
+char mode = '\0';
+char new_window_size = '\0';
+char pattern_cur = '\0';
 
 void I2C_Slave_Init(void)
 {
@@ -51,41 +53,18 @@ void sendNibble(unsigned char nibble) {
     pulseEnable();  // Pulsar Enable para enviar datos
 }
 
-void sendData(unsigned char data) {
+void send_data(unsigned char data) {
     P2OUT |= RS;    // Modo datos
     sendNibble(data >> 4);  // Enviar los 4 bits más significativos
     sendNibble(data & 0x0F);  // Enviar los 4 bits menos significativos (corregido)
     __delay_cycles(4000); // Retardo para procesar los datos
 }
 
-void sendCommand(unsigned char cmd) {
+void send_command(unsigned char cmd) {
     P2OUT &= ~RS;   // Modo comando
     sendNibble(cmd >> 4);  // Enviar los 4 bits más significativos
     sendNibble(cmd);  // Enviar los 4 bits menos significativos
     __delay_cycles(4000); // Retardo para asegurarse de que el comando se procese
-}
-
-unsigned char cursorState = 0;  // 0 = OFF, 1 = ON
-void toggleCursor() {
-    
-    cursorState ^= 1;  // Alternar entre 0 y 1 usando XOR
-
-    if (cursorState) {
-        sendCommand(0x0E);  // Display ON, Cursor ON
-    } else {
-        sendCommand(0x0C);  // Display ON, Cursor OFF
-    }
-}
-
-unsigned char cursorBlinkState = 0;
-void toggleBlinkCursor() {
-    cursorBlinkState ^= 1;  // Alternar entre 0 y 1 usando XOR
-
-    if (cursorBlinkState) {
-        sendCommand(0x0F);  // Cursor ON con parpadeo
-    } else {
-        sendCommand(0x0E);  // Cursor ON sin parpadeo
-    }
 }
 
 void lcdInit() {
@@ -104,21 +83,27 @@ void lcdInit() {
     sendNibble(0x03);  // Repetir la inicialización
     sendNibble(0x02);  // Establecer modo de 4 bits
 
-    sendCommand(0x28);  // Configurar LCD: 4 bits, 2 líneas, 5x8
-    sendCommand(0x0C);  // Encender display, apagar cursor
-    sendCommand(0x06);  // Modo de escritura automática
-    sendCommand(0x01);  // Limpiar la pantalla
+    send_command(0x28);  // Configurar LCD: 4 bits, 2 líneas, 5x8
+    send_command(0x0C);  // Encender display, apagar cursor
+    send_command(0x06);  // Modo de escritura automática
+    send_command(0x01);  // Limpiar la pantalla
     __delay_cycles(2000); // Esperar para limpiar la pantalla
+
+    send_command(0x01);
+     __delay_cycles(2000);
+    lcd_print("NO PATTERN", 0x00);
+    lcd_print("T=xx.xºC",0x40);
+    lcd_print("N=3", 0x4D);
 }
 
 void lcdSetCursor(unsigned char position) {
-    sendCommand(0x80 | position);  // Establecer la dirección del cursor en la DDRAM
+    send_command(0x80 | position);  // Establecer la dirección del cursor en la DDRAM
 }
 
-void lcdPrint(const char* str, unsigned char startPos) {
+void lcd_print(const char* str, unsigned char startPos) {
     lcdSetCursor(startPos);
     while (*str) {
-        sendData(*str++);
+        send_data(*str++);
         startPos++;
         if (startPos == 0x10) startPos = 0x40;  // Salto automático a segunda línea
     }
@@ -126,63 +111,82 @@ void lcdPrint(const char* str, unsigned char startPos) {
 
 void display_output(char input)
 {
-    switch (input) 
-    { 
+    switch (input)
+    {
+        case 'A':
+            mode = 'A';
+            break;
+        case 'B':
+            lcd_print("SET WINDOW SIZE ", 0x00);
+            mode = 'B';
+            break;
         case 'C':
-        toggleCursor();
-        break;
+            lcd_print("SET PATTERN     ", 0x00);
+            mode = 'C';
+            break;
+        case 'D':
+            send_command(0x01);
+            break;
+    }
 
-        case '9':
-        toggleBlinkCursor();
-        break;
-
-        case '0':
-        sendCommand(0x01);
-        __delay_cycles(2000);
-        lcdPrint("STATIC", 0x00);
-        break;
-
-        case '1':
-        sendCommand(0x01);
-        __delay_cycles(2000);
-        lcdPrint("TOGGLE", 0x00);
-        break;
-
-        case '2':
-        sendCommand(0x01);
-        __delay_cycles(2000);
-        lcdPrint("UP COUNTER", 0x00);
-        break;
-
-        case '3':
-        sendCommand(0x01);
-        __delay_cycles(2000);
-        lcdPrint("IN AND OUT", 0x00);
-        break;
-
-        case '4':
-        sendCommand(0x01);
-        __delay_cycles(2000);
-        lcdPrint("DOWN COUNTER", 0x00);
-        break;
-
-        case '5':
-        sendCommand(0x01);
-        __delay_cycles(2000);
-        lcdPrint("ROTATE 1 LEFT", 0x00);
-        break;
-
-        case '6':
-        sendCommand(0x01);
-        __delay_cycles(2000);
-        lcdPrint("ROTATE 7 RIGHT", 0x00);
-        break;
-
-        case '7':
-        sendCommand(0x01);
-        __delay_cycles(2000);
-        lcdPrint("FILL LEFT", 0x00);
-        break;
+    if ((mode == 'B') && (input >= '0' && input <= '9')) 
+    { 
+        new_window_size = input;
+        lcd_print("N=", 0x4D);
+        send_data(new_window_size);
+        mode = 'C';
+        input = pattern_cur;
+    } 
+           
+    if (mode == 'C')
+    {
+        switch (input) 
+        { 
+            case '0':
+                lcd_print("STATIC          ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case '1':
+                lcd_print("TOGGLE          ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case '2':
+                lcd_print("UP COUNTER      ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case '3':
+                lcd_print("IN AND OUT      ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case '4':
+                lcd_print("DOWN COUNTER    ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case '5':
+                lcd_print("ROTATE 1 LEFT   ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case '6':
+                lcd_print("ROTATE 7 RIGHT  ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case '7':
+                lcd_print("FILL LEFT       ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case 'D':
+                send_command(0x01);
+                mode = 'A';
+                break;
+        }
     }
 }
 
