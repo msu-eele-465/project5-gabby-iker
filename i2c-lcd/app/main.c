@@ -1,32 +1,26 @@
+#include "intrinsics.h"
 #include <msp430.h>
+#include <stdbool.h>
 
-//------------------------------------------------------------------------------
-// Definitions
-//------------------------------------------------------------------------------
-// Port 2
+
+// Puerto 2
 #define RS BIT0     // P2.0
 #define EN BIT6     // P2.6
 
-// Port 1
+// Puerto 1
 #define D4  BIT4     // P1.4
 #define D5 BIT5     // P1.5
 #define D6 BIT6     // P1.6
 #define D7 BIT7     // P1.7
-
 #define SLAVE_ADDR  0x48                    // Slave I2C Address
 
-//------------------------------------------------------------------------------
-// Variables
-//------------------------------------------------------------------------------
-volatile unsigned char receivedData = 0;    // Received data
-char key_unlocked;                          // Store key press
-unsigned char cursorState = 0;              // 0 = OFF, 1 = ON
-unsigned char cursorBlinkState = 0;         // Store cursor blink state
+volatile unsigned char receivedData = 0;    // Recieved data
+char key_unlocked;
+char mode = '\0';
+char new_window_size = '\0';
+char pattern_cur = '\0';
 
-//------------------------------------------------------------------------------
-// Begin Slave I2C Initialization
-//------------------------------------------------------------------------------
-void slave_i2c_init(void)
+void I2C_Slave_Init(void)
 {
     WDTCTL = WDTPW | WDTHOLD;  // Stop Watchdog Timer
 
@@ -47,240 +41,179 @@ void slave_i2c_init(void)
 
     __enable_interrupt();               // Enable Maskable IRQs
 }
-//--End Slave I2C Init----------------------------------------------------------
 
-//------------------------------------------------------------------------------
-// Begin Pulse Enable
-//------------------------------------------------------------------------------
-void pulse_enable() {
-    P2OUT |= EN;             // Set Enable to 1
-    __delay_cycles(1000);    // Delay
-    P2OUT &= ~EN;            // Set Enable to 0
-    __delay_cycles(1000);    // Delay
+void pulseEnable() {
+    P2OUT |= EN;             // Establecer Enable en 1
+    __delay_cycles(1000);    // Retardo
+    P2OUT &= ~EN;            // Establecer Enable en 0
+    __delay_cycles(1000);    // Retardo
 }
-//--End Pulse Enable------------------------------------------------------------
 
-//------------------------------------------------------------------------------
-// Begin Send Nibble
-//------------------------------------------------------------------------------
-void send_nibble(unsigned char nibble) {
-    P1OUT &= ~(D4 | D5 | D6 | D7);      // Clear data bits
-    P1OUT |= ((nibble & 0x0F) << 4);    // Load nibble into corresponding bits (P1.4 to P1.7)
-    pulse_enable();                     // Pulse Enable to send data
+void sendNibble(unsigned char nibble) {
+    P1OUT &= ~(D4 | D5 | D6 | D7);  // Limpiar los bits de datos
+    P1OUT |= ((nibble & 0x0F) << 4);  // Cargar el nibble en los bits correspondientes (P1.4 a P1.7)
+    pulseEnable();  // Pulsar Enable para enviar datos
 }
-//--End Send Nibble-------------------------------------------------------------
 
-//------------------------------------------------------------------------------
-// Begin Send Data
-//------------------------------------------------------------------------------
 void send_data(unsigned char data) {
-    P2OUT |= RS;                // Data mode
-    send_nibble(data >> 4);     // Send most significant 4 bits
-    send_nibble(data & 0x0F);   // Send least significant 4 bits (corrected)
-    __delay_cycles(4000);       // Delay to process data
+    P2OUT |= RS;    // Modo datos
+    sendNibble(data >> 4);  // Enviar los 4 bits más significativos
+    sendNibble(data & 0x0F);  // Enviar los 4 bits menos significativos (corregido)
+    __delay_cycles(4000); // Retardo para procesar los datos
 }
-//--End Send Data---------------------------------------------------------------
 
-//------------------------------------------------------------------------------
-// Begin Send Command
-//------------------------------------------------------------------------------
 void send_command(unsigned char cmd) {
-    P2OUT &= ~RS;               // Command mode
-    send_nibble(cmd >> 4);      // Send most significant 4 bits
-    send_nibble(cmd);           // Send least significant 4 bits
-    __delay_cycles(4000);       // Delay to ensure command is processed
+    P2OUT &= ~RS;   // Modo comando
+    sendNibble(cmd >> 4);  // Enviar los 4 bits más significativos
+    sendNibble(cmd);  // Enviar los 4 bits menos significativos
+    __delay_cycles(4000); // Retardo para asegurarse de que el comando se procese
 }
-//--End Send Command------------------------------------------------------------
 
-//------------------------------------------------------------------------------
-// Begin Toggle Cursor
-//------------------------------------------------------------------------------
-void toggle_cursor() {
-    
-    cursorState ^= 1;           // Toggle between 0 and 1 using XOR
-
-    if (cursorState) {
-        send_command(0x0E);     // Display ON, Cursor ON
-    } else {
-        send_command(0x0C);     // Display ON, Cursor OFF
-    }
-}
-//--End Toggle Cursor-----------------------------------------------------------
-
-//------------------------------------------------------------------------------
-// Begin Toggle Blink Cursor
-//------------------------------------------------------------------------------
-void toggle_blink_cursor() {
-    cursorBlinkState ^= 1;      // Toggle between 0 and 1 using XOR
-
-    if (cursorBlinkState) {
-        send_command(0x0F);     // Cursor ON with blink
-    } else {
-        send_command(0x0E);     // Cursor ON without blink
-    }
-}
-//-- End Toggle Blink Cursor----------------------------------------------------
-
-//------------------------------------------------------------------------------
-// Begin LCD Initialization
-//------------------------------------------------------------------------------
-void lcd_init() {
-    // Configure pins as output
+void lcdInit() {
+    // Configurar pines como salida
     P1DIR |= D4 | D5 | D6 | D7;
     P2DIR |= RS | EN;
 
-    // Clear outputs
+    // Limpiar salidas
     P1OUT &= ~(D4 | D5 | D6 | D7);
     P2OUT &= ~(RS | EN);
-    __delay_cycles(50000);  // Startup delay
-    send_nibble(0x03);      // LCD initialization
-    __delay_cycles(5000);   // Delay
-    send_nibble(0x03);      // Repeat initialization
-    __delay_cycles(200);    // Delay
-    send_nibble(0x03);      // Repeat initialization
-    send_nibble(0x02);      // Set 4-bit mode
+    __delay_cycles(50000);  // Retardo de inicio
+    sendNibble(0x03);  // Inicialización del LCD
+    __delay_cycles(5000);  // Retardo
+    sendNibble(0x03);  // Repetir la inicialización
+    __delay_cycles(200);  // Retardo
+    sendNibble(0x03);  // Repetir la inicialización
+    sendNibble(0x02);  // Establecer modo de 4 bits
 
-    send_command(0x28);     // Configure LCD: 4 bits, 2 lines, 5x8
-    send_command(0x0C);     // Display ON, cursor OFF
-    send_command(0x06);     // Automatic write mode
-    send_command(0x01);     // Clear screen
-    __delay_cycles(2000);   // Wait for screen to clear
+    send_command(0x28);  // Configurar LCD: 4 bits, 2 líneas, 5x8
+    send_command(0x0C);  // Encender display, apagar cursor
+    send_command(0x06);  // Modo de escritura automática
+    send_command(0x01);  // Limpiar la pantalla
+    __delay_cycles(2000); // Esperar para limpiar la pantalla
 }
-//-- End LCD Init---------------------------------------------------------------
 
-//------------------------------------------------------------------------------
-// Begin LCD Set Cursor
-//------------------------------------------------------------------------------
-void lcd_set_cursor(unsigned char position) {
-    send_command(0x80 | position);  // Set cursor address in DDRAM
+void lcdSetCursor(unsigned char position) {
+    send_command(0x80 | position);  // Establecer la dirección del cursor en la DDRAM
 }
-//-- End LCD Set Cursor---------------------------------------------------------
 
-//------------------------------------------------------------------------------
-// Begin LCD Print
-//------------------------------------------------------------------------------
 void lcd_print(const char* str, unsigned char startPos) {
-    lcd_set_cursor(startPos);
+    lcdSetCursor(startPos);
     while (*str) {
         send_data(*str++);
         startPos++;
-        if (startPos == 0x10) startPos = 0x40;  // Auto jump to second line
+        if (startPos == 0x10) startPos = 0x40;  // Salto automático a segunda línea
     }
 }
-//-- End LCD Print--------------------------------------------------------------
 
-//------------------------------------------------------------------------------
-// Begin Display Output
-//------------------------------------------------------------------------------
 void display_output(char input)
 {
-    switch (input) 
-    { 
+    switch (input)
+    {
+        case 'A':
+            mode = 'A';
+            break;
+        case 'B':
+            lcd_print("SET WINDOW SIZE ", 0x00);
+            mode = 'B';
+            break;
         case 'C':
-            toggle_cursor();
-            break;
-        case '9':
-            toggle_blink_cursor();
-            break;
-        case '0':
-            send_command(0x01);
-            __delay_cycles(2000);
-            lcd_print("STATIC", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('0');
-            lcd_set_cursor(0x06);
-            break;
-        case '1':
-            send_command(0x01);
-            __delay_cycles(2000);
-            lcd_print("TOGGLE", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('1');
-            lcd_set_cursor(0x06);
-            break;
-        case '2':
-            send_command(0x01);
-            __delay_cycles(2000);
-            lcd_print("UP COUNTER", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('2');
-            lcd_set_cursor(0x0A);
-            break;
-        case '3':
-            send_command(0x01);
-            __delay_cycles(2000);
-            lcd_print("IN AND OUT", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('3');
-            lcd_set_cursor(0x0A);
-            break;
-        case '4':
-            send_command(0x01);
-            __delay_cycles(2000);
-            lcd_print("DOWN COUNTER", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('4');
-            lcd_set_cursor(0x0C);
-            break;
-        case '5':
-            send_command(0x01);
-            __delay_cycles(2000);
-            lcd_print("ROTATE 1 LEFT", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('5');
-            lcd_set_cursor(0x0D);
-            break;
-        case '6':
-            send_command(0x01);
-            __delay_cycles(2000);
-            lcd_print("ROTATE 7 RIGHT", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('6');
-            lcd_set_cursor(0x0E);
-            break;
-        case '7':
-            send_command(0x01);
-            __delay_cycles(2000);
-            lcd_print("FILL LEFT", 0x00);
-            lcd_set_cursor(0x4F);
-            send_data('7');
-            lcd_set_cursor(0x09);
+            lcd_print("SET PATTERN     ", 0x00);
+            mode = 'C';
             break;
         case 'D':
             send_command(0x01);
             break;
+        case 'Z':
+            send_command(0x01);
+            __delay_cycles(2000);
+            lcd_print("NO PATTERN", 0x00);
+            lcd_print("T=xx.x", 0x40);      // Start of temperature display
+            lcdSetCursor(0x46);             // Move to where the degree symbol goes
+            send_data(0xDF);                // Send the built-in degree symbol
+            lcd_print("C", 0x47);           // Continue with 'C'
+            lcd_print("N=3", 0x4D);
+            mode = 'A';
+            break;
+    }
 
+    if ((mode == 'B') && (input >= '1' && input <= '9')) 
+    { 
+        new_window_size = input;
+        lcd_print("N=", 0x4D);
+        send_data(new_window_size);
+        mode = 'C';
+        input = pattern_cur;
+    } 
+           
+    if (mode == 'C')
+    {
+        switch (input) 
+        { 
+            case '0':
+                lcd_print("STATIC          ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case '1':
+                lcd_print("TOGGLE          ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case '2':
+                lcd_print("UP COUNTER      ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case '3':
+                lcd_print("IN AND OUT      ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case '4':
+                lcd_print("DOWN COUNTER    ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case '5':
+                lcd_print("ROTATE 1 LEFT   ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case '6':
+                lcd_print("ROTATE 7 RIGHT  ", 0x00);
+                pattern_cur = input;
+                mode = 'A';
+                break;
+            case 'D':
+                send_command(0x01);
+                mode = 'A';
+                break;
+        }
     }
 }
-//-- End Display Output---------------------------------------------------------
 
-//------------------------------------------------------------------------------
-// Begin Main
-//------------------------------------------------------------------------------
 int main(void) {
-    lcd_init();                         // Initialize LCD
-    slave_i2c_init();                   // Initialize the slave for I2C
+    //char key_unlocked;
+    WDTCTL = WDTPW | WDTHOLD;  // Detener el watchdog
+    PM5CTL0 &= ~LOCKLPM5;
+    lcdInit();  // Inicializar el LCD
+    I2C_Slave_Init();                   // Initialize the slave for I2C
     __bis_SR_register(LPM0_bits + GIE); // Enter LPM0, enable interrupts
     return 0;
         
     
 }
-//-- End Main-------------------------------------------------------------------
 
-//------------------------------------------------------------------------------
-// Begin Interrupt Service Routines
-//------------------------------------------------------------------------------
+// I2C ISR
 #pragma vector = USCI_B0_VECTOR
 __interrupt void USCI_B0_ISR(void)
 {
     switch (__even_in_range(UCB0IV, USCI_I2C_UCTXIFG0))
     {
         case USCI_I2C_UCRXIFG0:         // Receive Interrupt
-            key_unlocked = UCB0RXBUF;   // Read received data
             display_output(UCB0RXBUF);
             break;
         default: 
             break;
     }
 }
-//-- End Interrupt Service Routines --------------------------------------------

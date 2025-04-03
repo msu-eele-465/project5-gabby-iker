@@ -1,5 +1,5 @@
 /*
- * EELE 465, Project 5
+ * EELE 465, Project 4
  * Gabby and Iker
  *
  * Target device: MSP430FR2355 Master
@@ -136,9 +136,8 @@ char keypad_unlocked(void)
                     if ((PROWIN & (1 << row)) == 0) {
                         key_unlocked = keypad[row][col];
                         if (key_unlocked != 'D') {
-                            master_i2c_send(key_unlocked, 0x068);
-                            master_i2c_send(key_unlocked, 0x048);
-                            //set_led_bar(key_unlocked);
+                            master_i2c_send(key_unlocked, 0x068);   // led slave
+                            master_i2c_send(key_unlocked, 0x048);   // lcd slave
                         }
                         // Wait for key release
                         while ((PROWIN & (1 << row)) == 0);
@@ -146,9 +145,8 @@ char keypad_unlocked(void)
 
                         if (key_unlocked == 'D') {
                             rgb_led_continue(3);  // Set LED to red when 'D' is pressed
-                            master_i2c_send('D', 0x068);
-                            master_i2c_send('D', 0x048);
-                            //set_led_bar('D');
+                            master_i2c_send('D', 0x068);            // led slave
+                            master_i2c_send('D', 0x048);            // lcd slave
                             return key_unlocked;
                         }
                     }
@@ -169,7 +167,7 @@ char keypad_unlocked(void)
 int main(void)
 {   
     int counter, i, equal;
-    char introduced_password[TABLE_SIZE], key, save_digit, key_unlocked; 
+    char introduced_password[TABLE_SIZE], key; 
 
     keypad_init();
     heartbeat_init();
@@ -211,6 +209,7 @@ int main(void)
             {
                 introduced_password[i] = 0;        
             }
+            master_i2c_send('Z', 0x048);            // lcd slave
             keypad_unlocked();  // This now handles polling until 'D' is pressed
 
 
