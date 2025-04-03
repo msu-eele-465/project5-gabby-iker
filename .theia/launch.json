@@ -25,6 +25,24 @@
                 "name": "i2c-led-bar",
                 "resourceId": "/i2c-led-bar"
             }
+        },
+        {
+            "name": "controller",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "controller",
+                "resourceId": "/controller"
+            }
+        },
+        {
+            "name": "i2c-lcd",
+            "type": "ccs-debug",
+            "request": "launch",
+            "projectInfo": {
+                "name": "i2c-lcd",
+                "resourceId": "/i2c-lcd"
+            }
         }
     ]
 }
