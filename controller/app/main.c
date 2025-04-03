@@ -1,5 +1,5 @@
 /*
- * EELE 465, Project 5
+ * EELE 465, Project 4
  * Gabby and Iker
  *
  * Target device: MSP430FR2355 Master
@@ -138,7 +138,6 @@ char keypad_unlocked(void)
                         if (key_unlocked != 'D') {
                             master_i2c_send(key_unlocked, 0x068);
                             master_i2c_send(key_unlocked, 0x048);
-                            //set_led_bar(key_unlocked);
                         }
                         // Wait for key release
                         while ((PROWIN & (1 << row)) == 0);
@@ -148,7 +147,6 @@ char keypad_unlocked(void)
                             rgb_led_continue(3);  // Set LED to red when 'D' is pressed
                             master_i2c_send('D', 0x068);
                             master_i2c_send('D', 0x048);
-                            //set_led_bar('D');
                             return key_unlocked;
                         }
                     }
@@ -190,6 +188,7 @@ int main(void)
                 counter++;
             }        
         }
+
         //Compare the introduced code with the real code   
         equal = 1;   
         for (i = 0; i < TABLE_SIZE; i++) {
@@ -199,6 +198,7 @@ int main(void)
                 break;
             }
         }
+
         // Verify the code
         if (equal==1) 
         {
@@ -210,6 +210,8 @@ int main(void)
                 introduced_password[i] = 0;        
             }
             keypad_unlocked();  // This now handles polling until 'D' is pressed
+
+
         } 
         else 
         {
@@ -218,6 +220,7 @@ int main(void)
             rgb_led_continue(3);            // Set LED to red
             master_i2c_send('\0', 0x068);
             master_i2c_send('\0', 0x048);
+            //led_patterns('\0');
             for (i = 0; i < TABLE_SIZE; i++) 
             {
                 introduced_password[i] = 0;        
@@ -226,4 +229,4 @@ int main(void)
     }
     return 0;
 }
-//--End Main-------------------------------------------------------------------
+//--End Main------------------------------------------------------------
