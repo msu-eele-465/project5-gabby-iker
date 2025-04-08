@@ -41,15 +41,18 @@
 // Variables
 //----------------------------------------------------------------------
 char real_code[] = {'3','9','4','D'};
-
 char keypad[ROW][COL] = {
     {'1', '2', '3', 'A'},
     {'4', '5', '6', 'B'},
     {'7', '8', '9', 'C'},
     {'*', '0', '#', 'D'}
 };
-
 int lockState = 3;
+volatile unsigned int window_size = 3;
+volatile unsigned int adc_result = 0;
+volatile unsigned int samples[9] = {0};
+volatile unsigned int sample_index = 0;
+volatile unsigned int temp_C = 0;
 //--End Variables-------------------------------------------------------
 
 //----------------------------------------------------------------------
@@ -64,7 +67,7 @@ void debounce() {
 //----------------------------------------------------------------------
 // Begin Initializing Keypad Ports
 //----------------------------------------------------------------------
-void keypad_init() 
+void keypad_init(void) 
 {
     // Set rows as inputs (with pull-up)
     PROWDIR &= ~0x0F;   // P1.0, P1.1, P1.2, P1.3 as inputs
@@ -76,6 +79,28 @@ void keypad_init()
     PCOLOUT &= ~(BIT0 | BIT1 | BIT2 | BIT3);  // Set down the pins P5.0, P5.1, P5.2 y P5.3:
 }
 //--End Initialize Keypad-----------------------------------------------
+
+//----------------------------------------------------------------------
+// Begin Initializing ADC
+//----------------------------------------------------------------------
+void adc_init(void)
+{
+    // Configure GPIO
+    P1SEL0 |= BIT3;             // P1.3 = A3 (analog)
+    P1DIR &= ~BIT3;             // Input
+
+    // Configure ADC
+    ADCCTL0 = ADCSHT_2 | ADCON;
+    ADCCTL1 = ADCSHP | ADCSSEL_1;    // Use sampling timer, ACLK
+    ADCCTL2 = ADCRES_2;              // 12-bit
+    ADCMCTL0 = ADCINCH_3;            // Channel A3
+
+    // Timer setup (ACLK = 32768 Hz → 0.5s = 16384)
+    TB1CTL = TBSSEL__ACLK | MC__UP | TBCLR;
+    TB1CCR0 = 16384;
+    TB1CCTL0 = CCIE;
+}
+//--End Initialize ADC--------------------------------------------------
 
 //----------------------------------------------------------------------
 // Begin Unlocking Routine
@@ -105,7 +130,7 @@ char keypad_unlocking(void)
                 }
             }
         }
-        // Put the column high (desactivated)
+        // Put the column high (deactivated)
         PCOLOUT |= (1 << col);
     }
 
@@ -144,9 +169,9 @@ char keypad_unlocked(void)
                         PCOLOUT |= (1 << col);
 
                         if (key_unlocked == 'D') {
-                            rgb_led_continue(3);  // Set LED to red when 'D' is pressed
-                            master_i2c_send('D', 0x068);            // led slave
-                            master_i2c_send('D', 0x048);            // lcd slave
+                            rgb_led_continue(3);            // Set LED to red when 'D' is pressed
+                            master_i2c_send('D', 0x068);    // led slave
+                            master_i2c_send('D', 0x048);    // lcd slave
                             return key_unlocked;
                         }
                     }
@@ -161,6 +186,27 @@ char keypad_unlocked(void)
 //--End Unlocked--------------------------------------------------------
 
 //----------------------------------------------------------------------
+// Begin Moving Average
+//----------------------------------------------------------------------
+void adc_moving_average(void) {
+    unsigned long sum = 0;
+    int i;
+    for (i = 0; i < window_size; i++) {
+        sum += samples[i];
+    }
+    unsigned int avg_adc = sum / window_size;
+
+    // Convert ADC to voltage
+    float voltage = (avg_adc * 3.3f) / 4095.0f;
+
+    // LM19 sensor voltage to temperature conversion
+    // Vtemp = -11.69 mV/°C * T + 1.8639 V → Solve for T
+    temp_C = (unsigned int)((1.8639f - voltage) / 0.001169f);
+    master_i2c_send(temp_C, 0x048);    // lcd slave
+}
+//--End Movind Average--------------------------------------------------
+
+//----------------------------------------------------------------------
 // Begin Main
 //----------------------------------------------------------------------
 
@@ -173,6 +219,7 @@ int main(void)
     heartbeat_init();
     rgb_led_init();
     master_i2c_init();
+    adc_init();
       
     while(true)
     {
@@ -231,3 +278,21 @@ int main(void)
     return 0;
 }
 //--End Main------------------------------------------------------------
+
+
+#pragma vector = TIMER1_B0_VECTOR
+__interrupt void ISR_TB1_CCR0(void)
+{
+    ADCCTL0 |= ADCENC | ADCSC;             // Start ADC conversion
+    while (ADCCTL1 & ADCBUSY);             // Wait for result
+    adc_result = ADCMEM0;                  // Get result
+
+    samples[sample_index++] = adc_result;
+    if (sample_index >= window_size)
+    {
+        sample_index = 0;
+        adc_moving_average();
+    }
+
+    TB1CCTL0 &= ~CCIFG;                    // Clear interrupt flag
+}
