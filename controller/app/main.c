@@ -12,9 +12,9 @@
 #include <stdbool.h>
 #include <stdio.h>
 #include "intrinsics.h"
-#include "C:\Users\gabri\Documents\Spring2025\EELE465\project04\project4-gabby-iker\controller\src\master_i2c.h"
-#include "C:\Users\gabri\Documents\Spring2025\EELE465\project04\project4-gabby-iker\controller\src\rgb_led.h"
-#include "C:\Users\gabri\Documents\Spring2025\EELE465\project04\project4-gabby-iker\controller\src\heartbeat.h"
+#include "..\src\master_i2c.h"
+#include "..\src\rgb_led.h"
+#include "..\src\heartbeat.h"
 //--End Headers---------------------------------------------------------
 
 //----------------------------------------------------------------------
@@ -48,6 +48,8 @@ char keypad[ROW][COL] = {
     {'*', '0', '#', 'D'}
 };
 int lockState = 3;
+bool bool_unlocked = false;
+volatile bool adc_ready = false;
 volatile unsigned int window_size = 3;
 volatile unsigned int adc_result = 0;
 volatile unsigned int samples[9] = {0};
@@ -101,6 +103,41 @@ void adc_init(void)
     TB1CCTL0 = CCIE;
 }
 //--End Initialize ADC--------------------------------------------------
+
+void adc_off(void)
+{
+    TB1CCTL0 &= ~CCIE;     // Disable Timer1_B0 interrupt
+    TB1CTL = 0;            // Stop Timer1
+    ADCCTL0 &= ~ADCENC;    // Disable ADC conversion
+    ADCCTL0 &= ~ADCON;     // Turn off ADC
+}
+
+//----------------------------------------------------------------------
+// Begin Moving Average
+//----------------------------------------------------------------------
+void adc_moving_average(void) {
+    unsigned long sum = 0;
+    int i;
+    for (i = 0; i < window_size; i++) {
+        sum += samples[i];
+    }
+    unsigned int avg_adc = sum / window_size;
+
+    // Convert ADC to voltage
+    float voltage = (avg_adc * 3.3f) / 4095.0f;
+
+    // LM19 sensor voltage to temperature conversion
+    // Vtemp = -11.69 mV/°C * T + 1.8639 V → Solve for T
+    temp_C = (unsigned int)((1.8639f - voltage) / 0.001169f);
+    char buffer[4];
+    int j;
+    snprintf(buffer, sizeof(buffer), "%d", temp_C);  // Convert to "xxx"
+    master_i2c_send('Y', 0x048);
+    for (j = 0; buffer[j] != '\0'; j++) {
+        master_i2c_send(buffer[j], 0x048);  // Send each character
+    }
+}
+//--End Movind Average--------------------------------------------------
 
 //----------------------------------------------------------------------
 // Begin Unlocking Routine
@@ -172,6 +209,8 @@ char keypad_unlocked(void)
                             rgb_led_continue(3);            // Set LED to red when 'D' is pressed
                             master_i2c_send('D', 0x068);    // led slave
                             master_i2c_send('D', 0x048);    // lcd slave
+                            bool_unlocked = false;
+                            adc_off();
                             return key_unlocked;
                         }
                     }
@@ -180,37 +219,21 @@ char keypad_unlocked(void)
             // Deactivate column
             PCOLOUT |= (1 << col);
         }
+        if (bool_unlocked && adc_ready)
+        {
+            adc_ready = false;
+            adc_moving_average();  // This does the I2C and temperature calc
+        }
+
     }
     return key_unlocked;
 }
 //--End Unlocked--------------------------------------------------------
 
 //----------------------------------------------------------------------
-// Begin Moving Average
-//----------------------------------------------------------------------
-void adc_moving_average(void) {
-    unsigned long sum = 0;
-    int i;
-    for (i = 0; i < window_size; i++) {
-        sum += samples[i];
-    }
-    unsigned int avg_adc = sum / window_size;
-
-    // Convert ADC to voltage
-    float voltage = (avg_adc * 3.3f) / 4095.0f;
-
-    // LM19 sensor voltage to temperature conversion
-    // Vtemp = -11.69 mV/°C * T + 1.8639 V → Solve for T
-    temp_C = (unsigned int)((1.8639f - voltage) / 0.001169f);
-    master_i2c_send(temp_C, 0x048);    // lcd slave
-}
-//--End Movind Average--------------------------------------------------
-
-//----------------------------------------------------------------------
 // Begin Main
 //----------------------------------------------------------------------
-
-int main(void)
+void main(void)
 {   
     int counter, i, equal;
     char introduced_password[TABLE_SIZE], key; 
@@ -219,7 +242,6 @@ int main(void)
     heartbeat_init();
     rgb_led_init();
     master_i2c_init();
-    adc_init();
       
     while(true)
     {
@@ -235,7 +257,6 @@ int main(void)
                 counter++;
             }        
         }
-
         //Compare the introduced code with the real code   
         equal = 1;   
         for (i = 0; i < TABLE_SIZE; i++) {
@@ -245,21 +266,20 @@ int main(void)
                 break;
             }
         }
-
         // Verify the code
         if (equal==1) 
         {
             printf("Correct Code!\n");
+            adc_init();
             counter = 0;
             rgb_led_continue(1);            // Set LED to blue
             for (i = 0; i < TABLE_SIZE; i++) 
             {
                 introduced_password[i] = 0;        
             }
+            bool_unlocked = true;
             master_i2c_send('Z', 0x048);            // lcd slave
             keypad_unlocked();  // This now handles polling until 'D' is pressed
-
-
         } 
         else 
         {
@@ -275,24 +295,26 @@ int main(void)
             }
         }    
     }
-    return 0;
 }
 //--End Main------------------------------------------------------------
 
-
+//----------------------------------------------------------------------
+// Begin Interrupt Service Routines
+//----------------------------------------------------------------------
 #pragma vector = TIMER1_B0_VECTOR
 __interrupt void ISR_TB1_CCR0(void)
 {
     ADCCTL0 |= ADCENC | ADCSC;             // Start ADC conversion
     while (ADCCTL1 & ADCBUSY);             // Wait for result
-    adc_result = ADCMEM0;                  // Get result
+    adc_result = ADCMEM0;
 
     samples[sample_index++] = adc_result;
     if (sample_index >= window_size)
     {
         sample_index = 0;
-        adc_moving_average();
+        adc_ready = true;   // Tell main loop to process this
     }
 
     TB1CCTL0 &= ~CCIFG;                    // Clear interrupt flag
 }
+//-- End Interrupt Service Routines ------------------------------------

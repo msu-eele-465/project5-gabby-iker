@@ -17,8 +17,10 @@
 volatile unsigned char receivedData = 0;    // Recieved data
 char key_unlocked;
 char mode = '\0';
+char prev_mode = '\0';
 char new_window_size = '\0';
 char pattern_cur = '\0';
+int length = 0;
 
 void I2C_Slave_Init(void)
 {
@@ -105,6 +107,33 @@ void lcd_print(const char* str, unsigned char startPos) {
     }
 }
 
+void display_temp(char input)
+{
+    char string[2];
+    string[0] = input;
+    string[1] = '\0';
+    switch (length) {
+        case 0:
+            lcd_print(string, 0x42);
+            length++;
+            break;
+        case 1:
+            lcd_print(string, 0x43);
+            length++;
+            break;
+        case 2:
+            lcdSetCursor(0x46);             // Move to where the degree symbol goes
+            send_data(0xDF);                // Send the built-in degree symbol
+            lcd_print("C", 0x47);           // Continue with 'C'
+            mode = prev_mode;
+            length = 0;
+            break;
+        default:
+            length = 0;
+            break;
+    }
+}
+
 void display_output(char input)
 {
     switch (input)
@@ -122,6 +151,10 @@ void display_output(char input)
             break;
         case 'D':
             send_command(0x01);
+            break;
+        case 'Y':
+            prev_mode = mode;
+            mode = 'Y';
             break;
         case 'Z':
             send_command(0x01);
@@ -190,6 +223,10 @@ void display_output(char input)
                 break;
         }
     }
+    if (mode == 'Y')
+    {
+        display_temp(input);
+    }
 }
 
 int main(void) {
@@ -200,10 +237,11 @@ int main(void) {
     I2C_Slave_Init();                   // Initialize the slave for I2C
     __bis_SR_register(LPM0_bits + GIE); // Enter LPM0, enable interrupts
     return 0;
-        
-    
 }
 
+//------------------------------------------------------------------------------
+// Begin Interrupt Service Routines
+//------------------------------------------------------------------------------
 // I2C ISR
 #pragma vector = USCI_B0_VECTOR
 __interrupt void USCI_B0_ISR(void)
@@ -217,3 +255,4 @@ __interrupt void USCI_B0_ISR(void)
             break;
     }
 }
+//-- End Interrupt Service Routines --------------------------------------------
