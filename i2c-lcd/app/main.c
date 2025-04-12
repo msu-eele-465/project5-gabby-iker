@@ -21,6 +21,7 @@ char prev_mode = '\0';
 char new_window_size = '\0';
 char pattern_cur = '\0';
 int length = 0;
+bool in_temp_mode = false;
 
 void I2C_Slave_Init(void)
 {
@@ -126,10 +127,12 @@ void display_temp(char input)
             break;
         case 3:
             lcd_print(string, 0x45);
+            in_temp_mode = false;
             mode = prev_mode;
             length = 0;
             break;
         default:
+            in_temp_mode = false;
             length = 0;
             break;
     }
@@ -154,6 +157,7 @@ void display_output(char input)
             send_command(0x01);
             break;
         case 'Y':
+            in_temp_mode = true;
             prev_mode = mode;
             mode = 'Y';
             length = 0; // reset position for temperature digits
@@ -171,7 +175,7 @@ void display_output(char input)
             break;
     }
 
-    if ((mode == 'B') && (input >= '1' && input <= '9')) 
+    if ((mode == 'B') && (input >= '1' && input <= '9') && in_temp_mode == false) 
     { 
         new_window_size = input;
         lcd_print("N=", 0x4D);
@@ -180,7 +184,7 @@ void display_output(char input)
         input = pattern_cur;
     } 
            
-    if (mode == 'C')
+    if (mode == 'C' && in_temp_mode == false)
     {
         switch (input) 
         { 
@@ -232,7 +236,6 @@ void display_output(char input)
 }
 
 int main(void) {
-    //char key_unlocked;
     WDTCTL = WDTPW | WDTHOLD;  // Detener el watchdog
     PM5CTL0 &= ~LOCKLPM5;
     lcdInit();  // Inicializar el LCD
