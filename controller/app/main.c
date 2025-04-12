@@ -1,5 +1,5 @@
 /*
- * EELE 465, Project 4
+ * EELE 465, Project 5
  * Gabby and Iker
  *
  * Target device: MSP430FR2355 Master

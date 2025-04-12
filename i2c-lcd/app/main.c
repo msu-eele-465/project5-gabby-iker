@@ -1,8 +1,21 @@
+/*
+ * EELE 465, Project 5
+ * Gabby and Iker
+ *
+ * Target device: MSP430FR2310 Slave
+ */
+
+//----------------------------------------------------------------------
+// Headers
+//----------------------------------------------------------------------
 #include "intrinsics.h"
 #include <msp430.h>
 #include <stdbool.h>
+//--End Headers---------------------------------------------------------
 
-
+//----------------------------------------------------------------------
+// Definitions
+//----------------------------------------------------------------------
 // Puerto 2
 #define RS BIT0     // P2.0
 #define EN BIT6     // P2.6
@@ -13,7 +26,11 @@
 #define D6 BIT6     // P1.6
 #define D7 BIT7     // P1.7
 #define SLAVE_ADDR  0x48                    // Slave I2C Address
+//--End Definitions-----------------------------------------------------
 
+//----------------------------------------------------------------------
+// Variables
+//----------------------------------------------------------------------
 volatile unsigned char receivedData = 0;    // Recieved data
 char key_unlocked;
 char mode = '\0';
@@ -22,7 +39,11 @@ char new_window_size = '\0';
 char pattern_cur = '\0';
 int length = 0;
 bool in_temp_mode = false;
+//--End Variables-------------------------------------------------------
 
+//----------------------------------------------------------------------
+// Begin I2C Init
+//----------------------------------------------------------------------
 void I2C_Slave_Init(void)
 {
     WDTCTL = WDTPW | WDTHOLD;  // Stop Watchdog Timer
@@ -44,7 +65,11 @@ void I2C_Slave_Init(void)
 
     __enable_interrupt();               // Enable Maskable IRQs
 }
+//--End I2C Init--------------------------------------------------------
 
+//----------------------------------------------------------------------
+// Begin Send Commands
+//----------------------------------------------------------------------
 void pulseEnable() {
     P2OUT |= EN;             // Establecer Enable en 1
     __delay_cycles(1000);    // Retardo
@@ -70,8 +95,16 @@ void send_command(unsigned char cmd) {
     sendNibble(cmd >> 4);  // Enviar los 4 bits más significativos
     sendNibble(cmd);  // Enviar los 4 bits menos significativos
     __delay_cycles(4000); // Retardo para asegurarse de que el comando se procese
-}
 
+void lcdSetCursor(unsigned char position) {
+    send_command(0x80 | position);  // Establecer la dirección del cursor en la DDRAM
+}
+}
+//--End Send Commands---------------------------------------------------
+
+//----------------------------------------------------------------------
+// Begine LCD Init
+//----------------------------------------------------------------------
 void lcdInit() {
     // Configurar pines como salida
     P1DIR |= D4 | D5 | D6 | D7;
@@ -94,11 +127,11 @@ void lcdInit() {
     send_command(0x01);  // Limpiar la pantalla
     __delay_cycles(2000); // Esperar para limpiar la pantalla
 }
+//--End LCD Init--------------------------------------------------------
 
-void lcdSetCursor(unsigned char position) {
-    send_command(0x80 | position);  // Establecer la dirección del cursor en la DDRAM
-}
-
+//----------------------------------------------------------------------
+// Begin Print Commands
+//----------------------------------------------------------------------
 void lcd_print(const char* str, unsigned char startPos) {
     lcdSetCursor(startPos);
     while (*str) {
@@ -234,7 +267,11 @@ void display_output(char input)
         display_temp(input);
     }
 }
+//--End Print Commands--------------------------------------------------
 
+//----------------------------------------------------------------------
+// Begin Main
+//----------------------------------------------------------------------
 int main(void) {
     WDTCTL = WDTPW | WDTHOLD;  // Detener el watchdog
     PM5CTL0 &= ~LOCKLPM5;
@@ -243,10 +280,11 @@ int main(void) {
     __bis_SR_register(LPM0_bits + GIE); // Enter LPM0, enable interrupts
     return 0;
 }
+//--End Main------------------------------------------------------------
 
-//------------------------------------------------------------------------------
+//----------------------------------------------------------------------
 // Begin Interrupt Service Routines
-//------------------------------------------------------------------------------
+//----------------------------------------------------------------------
 // I2C ISR
 #pragma vector = USCI_B0_VECTOR
 __interrupt void USCI_B0_ISR(void)
