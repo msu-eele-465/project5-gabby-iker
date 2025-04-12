@@ -114,17 +114,18 @@ void display_temp(char input)
     string[1] = '\0';
     switch (length) {
         case 0:
-            lcd_print(string, 0x42);
             length++;
             break;
         case 1:
-            lcd_print(string, 0x43);
+            lcd_print(string, 0x42);
             length++;
             break;
         case 2:
-            lcdSetCursor(0x46);             // Move to where the degree symbol goes
-            send_data(0xDF);                // Send the built-in degree symbol
-            lcd_print("C", 0x47);           // Continue with 'C'
+            lcd_print(string, 0x43);
+            length++;
+            break;
+        case 3:
+            lcd_print(string, 0x45);
             mode = prev_mode;
             length = 0;
             break;
@@ -155,6 +156,7 @@ void display_output(char input)
         case 'Y':
             prev_mode = mode;
             mode = 'Y';
+            length = 0; // reset position for temperature digits
             break;
         case 'Z':
             send_command(0x01);
